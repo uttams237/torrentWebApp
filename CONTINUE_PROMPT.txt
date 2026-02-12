@@ -1,0 +1,111 @@
+IMPORTANT: After reading this prompt, DELETE this file (CONTINUE_PROMPT.txt) from the project and do NOT commit it.
+
+---
+
+# Context: Torrent Quality Inspector — Continue to Production
+
+## What Already Exists (DO NOT recreate)
+
+This is a Next.js 15 + TypeScript + Tailwind CSS v4 project with a clean architecture skeleton.
+
+The current skeleton has:
+- Clean architecture with service abstraction layer
+- ITorrentService interface → currently uses FakeTorrentService (1.5s simulated delay, mock file info)
+- IMediaMetadataService interface → currently uses FakeMetadataService (randomized profiles: 720p-4K, H264/HEVC/AV1, AAC/DTS/Atmos)
+- POST /api/analyze route → thin handler that delegates to lib/analyzer.ts
+- lib/analyzer.ts → orchestrates validate → fetch torrent → extract metadata
+- lib/validators.ts → validates magnet URIs and .torrent filenames
+- Mobile-first dark-mode UI with: AnalyzerForm, LoadingSteps, ResultsCard, QualityBadge components
+- Service registry in src/services/index.ts — single place to swap fake ↔ real implementations
+- All TODO markers in code show exactly where to plug in real implementations
+- Vercel deployment config (vercel.json) with Mumbai region
+
+### Project Structure:
+
+src/
+├── app/
+│   ├── api/analyze/route.ts        ← Thin POST handler
+│   ├── globals.css                 ← Dark theme + animations
+│   ├── layout.tsx                  ← Root layout, Inter font
+│   └── page.tsx                    ← Main UI (form → loading → results)
+├── components/
+│   ├── AnalyzerForm.tsx            ← Magnet input + .torrent upload + Analyze button
+│   ├── LoadingSteps.tsx            ← Animated step indicator
+│   ├── QualityBadge.tsx            ← Colored badge (4K, HDR, Atmos)
+│   └── ResultsCard.tsx             ← Glass-morphism result card
+├── lib/
+│   ├── analyzer.ts                 ← Core orchestrator
+│   └── validators.ts               ← Input validation
+├── services/
+│   ├── FakeMetadataService.ts      ← Mock metadata (KEEP as fallback)
+│   ├── FakeTorrentService.ts       ← Mock torrent (KEEP as fallback)
+│   └── index.ts                    ← Service registry (swap here)
+├── types/
+│   ├── media.ts                    ← MediaAnalysisResult, TorrentFileInfo, API types
+│   ├── services.ts                 ← ITorrentService, IMediaMetadataService interfaces
+│   └── index.ts
+└── utils/
+    └── format.ts                   ← formatFileSize, formatBitrate
+
+
+## YOUR TASK: Build the Real Implementation
+
+Since we are now on a personal MacBook (no office restrictions), implement the following in order.
+
+FIRST STEP: Delete this file (CONTINUE_PROMPT.txt) from the project root. Do not commit it going forward.
+
+### Phase 1: Real Torrent Service
+1. Install webtorrent package (npm install webtorrent)
+2. Create src/services/RealTorrentService.ts implementing ITorrentService
+   - Parse magnet URIs using webtorrent
+   - Connect to DHT/trackers and resolve torrent metadata (name, files, sizes)
+   - Download ONLY the first few MB of the largest media file (enough for ffprobe to read headers)
+   - Add timeout handling (30 sec max) and proper cleanup (destroy client after use)
+   - Return TorrentFileInfo matching the existing interface
+3. Handle .torrent file upload — accept the binary file in the API and pass it to webtorrent
+
+### Phase 2: Real Metadata Extraction
+1. Install ffprobe: brew install ffmpeg (includes ffprobe)
+2. Install fluent-ffmpeg and @types/fluent-ffmpeg packages
+3. Create src/services/FFProbeMetadataService.ts implementing IMediaMetadataService
+   - Run ffprobe on the partially downloaded file
+   - Parse video stream: resolution, codec name, bitrate, frame rate, HDR metadata (color_transfer, color_primaries)
+   - Parse audio stream: codec, channels, channel_layout, bitrate
+   - Parse container: format_name, file size
+   - Map raw ffprobe values to the existing MediaAnalysisResult interface
+
+### Phase 3: Wire Up Real Services
+1. Update src/services/index.ts:
+   - Add env var check: USE_REAL_SERVICES=true → use real implementations
+   - Default to fake services as fallback
+2. Create .env.local with USE_REAL_SERVICES=true
+3. Test the full flow: paste a real magnet link → get real metadata back
+
+### Phase 4: Enhanced UI
+1. Add Server-Sent Events (SSE) or polling to stream real-time step updates from the backend (real torrent fetching can take 10-30 seconds)
+2. Show download progress percentage during torrent metadata fetch
+3. Add analysis history — store past results in localStorage and show them in a sidebar/list
+4. Add a "Compare" feature — select 2 results side-by-side to compare quality
+5. Add a quality score/rating (e.g., "Excellent", "Good", "Poor") based on resolution + codec + bitrate + audio
+6. Add input field auto-detection — detect if pasted text is a magnet link and auto-trigger analysis
+7. Add proper error boundaries and toast notifications
+
+### Phase 5: Production Hardening
+1. Add rate limiting to the API route (e.g., 10 requests/minute per IP)
+2. Add request size limits (prevent abuse via huge payloads)
+3. Add proper logging (consider pino or winston)
+4. Add unit tests for validators, analyzer, and services using Vitest
+5. Add integration test for the API route
+6. Add a README.md with setup instructions, architecture diagram, and screenshots
+7. Clean up temp downloaded files after analysis (use OS temp directory)
+8. Add proper error messages for common failures (no peers, timeout, corrupt file)
+
+## IMPORTANT RULES
+- DO NOT break the existing interface contracts (ITorrentService, IMediaMetadataService, MediaAnalysisResult)
+- KEEP FakeTorrentService and FakeMetadataService as fallbacks — they should still work when USE_REAL_SERVICES is not set
+- Follow the existing code style and architecture patterns
+- Keep the API route thin — all logic in services and lib
+- Keep the service registry pattern in src/services/index.ts
+- Mobile-first responsive design must be maintained
+- Dark mode must be maintained
+- Delete this file (CONTINUE_PROMPT.txt) before doing anything else
